@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordle Duel</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <div id="menu" class="screen">
+            <h1>WORDLE DUEL</h1>
+            <p class="intro">Two players. Same target word.<br>Matching guess words = instant death.</p>
+            <p class="intro-detail">Guess the 5-letter word before your opponent. Standard Wordle rules apply, but if both players submit the same word in any round, both lose immediately.</p>
+            <button onclick="playAI()">Play vs AI</button>
+            <button onclick="createRoom()">Create Room</button>
+            <input id="roomCode" placeholder="Room code" maxlength="6">
+            <button onclick="joinRoom()">Join Room</button>
+        </div>
+
+        <div id="game" class="screen hidden">
+            <p class="game-reminder">Match guesses = both lose. Each round's guesses will be revealed when both players have submitted.</p>
+
+            <div class="header">
+                <span id="round">Round 1/6</span>
+            </div>
+
+            <p id="round-status" class="round-status"></p>
+
+            <div class="boards">
+                <div>
+                    <h3>You</h3>
+                    <div id="board1" class="board"></div>
+                    <div id="player-status" class="status"></div>
+                </div>
+                <div>
+                    <h3 id="oppName">Opponent</h3>
+                    <div id="board2" class="board"></div>
+                    <div id="opponent-status" class="status"></div>
+                </div>
+            </div>
+
+            <input id="input" maxlength="5" autocomplete="off">
+            <button onclick="submitGuess()">Submit</button>
+            <div id="keyboard"></div>
+        </div>
+
+        <div id="result" class="screen hidden">
+            <h2 id="resultText"></h2>
+            <button onclick="location.reload()">Play Again</button>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="words.js"></script>
+    <script src="game.js"></script>
+    <script src="ai.js"></script>
+    <script src="firebase-sync.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
