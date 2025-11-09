@@ -92,14 +92,11 @@ class WordleDuelApp {
 
     // Create multiplayer room
     async createRoom() {
-        const name = prompt('Enter your name:');
-        if (!name) return;
-
         try {
-            this.playerName = name;
-            const roomCode = await firebaseSync.createRoom(name);
-            alert('Room created: ' + roomCode);
-            await this.joinMultiplayer(roomCode, name);
+            this.playerName = 'Player 1';
+            const roomCode = await firebaseSync.createRoom(this.playerName);
+            alert('Room created: ' + roomCode + '\nShare this code with your opponent.');
+            await this.joinMultiplayer(roomCode, this.playerName);
         } catch (error) {
             alert('Error creating room: ' + error.message);
         }
@@ -108,14 +105,16 @@ class WordleDuelApp {
     // Join multiplayer room
     async joinRoom() {
         const code = document.getElementById('roomCode').value.toUpperCase();
-        const name = prompt('Enter your name:');
 
-        if (!code || !name) return;
+        if (!code) {
+            alert('Please enter a room code');
+            return;
+        }
 
         try {
-            await firebaseSync.joinRoom(code, name);
-            this.playerName = name;
-            await this.joinMultiplayer(code, name);
+            this.playerName = 'Player 2';
+            await firebaseSync.joinRoom(code, this.playerName);
+            await this.joinMultiplayer(code, this.playerName);
         } catch (error) {
             alert('Error joining room: ' + error.message);
         }
@@ -381,17 +380,18 @@ class WordleDuelApp {
         const playerLastGuess = this.playerGame.guesses[this.playerGame.guesses.length - 1];
         const opponentLastGuess = this.opponentGame.guesses[this.opponentGame.guesses.length - 1];
 
-        if (playerLastGuess && opponentLastGuess && playerLastGuess === opponentLastGuess) {
-            // COLLISION - both lose!
+        // Check if either player won first (before checking collision)
+        const playerWon = this.playerGame.boards[this.playerGame.boards.length - 1]?.every(r => r === 'correct');
+        const opponentWon = this.opponentGame.boards[this.opponentGame.boards.length - 1]?.every(r => r === 'correct');
+
+        // If both guessed the answer correctly, whoever submitted first wins
+        if (playerWon && opponentWon) {
+            // In this prototype, we'll call it a draw (could track timestamps to determine winner)
             setTimeout(() => {
-                this.endGame('collision');
+                this.endGame('both_won');
             }, 2000);
             return;
         }
-
-        // Check if either player won
-        const playerWon = this.playerGame.boards[this.playerGame.boards.length - 1]?.every(r => r === 'correct');
-        const opponentWon = this.opponentGame.boards[this.opponentGame.boards.length - 1]?.every(r => r === 'correct');
 
         if (playerWon) {
             setTimeout(() => {
@@ -403,6 +403,15 @@ class WordleDuelApp {
         if (opponentWon) {
             setTimeout(() => {
                 this.endGame('opponent_win');
+            }, 2000);
+            return;
+        }
+
+        // Only check collision if neither player won
+        if (playerLastGuess && opponentLastGuess && playerLastGuess === opponentLastGuess) {
+            // COLLISION - both lose!
+            setTimeout(() => {
+                this.endGame('collision');
             }, 2000);
             return;
         }
@@ -458,6 +467,8 @@ class WordleDuelApp {
             resultText = 'You Win!';
         } else if (reason === 'opponent_win') {
             resultText = 'You Lose!';
+        } else if (reason === 'both_won') {
+            resultText = 'Both players guessed correctly - Draw!';
         } else {
             resultText = 'Draw - Neither player guessed the word';
         }
