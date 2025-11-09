@@ -105,7 +105,7 @@ class FirebaseSync {
     }
 
     // Sync player's game state (guesses, board)
-    async syncGameState(playerId, guesses, boards, gameState, currentRound) {
+    async syncGameState(playerId, guesses, boards, gameState) {
         try {
             if (!this.roomRef) return;
 
@@ -114,7 +114,6 @@ class FirebaseSync {
                 guesses,
                 boards,
                 state: gameState,
-                currentRound: currentRound || 1,
                 lastUpdate: firebase.database.ServerValue.TIMESTAMP
             });
         } catch (error) {
@@ -137,8 +136,7 @@ class FirebaseSync {
                     guesses: playerData.guesses || [],
                     boards: playerData.boards || [],
                     state: playerData.state || 'playing',
-                    isTyping: playerData.isTyping || false,
-                    currentRound: playerData.currentRound || 1
+                    isTyping: playerData.isTyping || false
                 });
             }
         });

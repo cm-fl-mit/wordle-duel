@@ -190,7 +190,7 @@ class WordleDuelApp {
                 // Show opponent status
                 const oppStatusEl = document.getElementById('opponent-status');
                 if (oppStatusEl) {
-                    oppStatusEl.textContent = '✓ Submitted';
+                    oppStatusEl.textContent = 'Opponent submitted their word!';
                 }
 
                 // Update main status if player hasn't submitted yet
@@ -210,7 +210,7 @@ class WordleDuelApp {
                 const oppStatusEl = document.getElementById('opponent-status');
                 if (oppStatusEl) {
                     if (opponentData.isTyping) {
-                        oppStatusEl.textContent = 'typing...';
+                        oppStatusEl.textContent = 'Opponent is typing...';
                     } else {
                         oppStatusEl.textContent = '';
                     }
@@ -242,7 +242,9 @@ class WordleDuelApp {
         if (playerStatusEl) playerStatusEl.textContent = '';
         if (opponentStatusEl) opponentStatusEl.textContent = '';
 
-        document.getElementById('round').textContent = `Round ${this.currentRound}/${this.maxRounds}`;
+        // Round number based on guesses made + 1 (current round)
+        const actualRound = this.playerGame.guesses.length + 1;
+        document.getElementById('round').textContent = `Round ${actualRound}/${this.maxRounds}`;
         const input = document.getElementById('input');
         input.value = '';
 
@@ -298,12 +300,11 @@ class WordleDuelApp {
         document.getElementById('input').value = '';
 
         // Update status messages
-        this.updateRoundStatus(`Waiting for ${this.opponentName} to reveal Round ${this.currentRound}`);
+        this.updateRoundStatus(`Waiting for ${this.opponentName} to submit...`);
 
-        const statusEl = document.getElementById('player-status');
-        if (statusEl) {
-            statusEl.textContent = '✓ Submitted';
-        }
+        // Don't update the board here - wait for reveal
+        // Update board to hide the submitted guess
+        this.updatePlayerBoard();
 
         // Sync state if multiplayer (but don't reveal yet)
         if (this.gameMode === 'multiplayer') {
@@ -311,8 +312,7 @@ class WordleDuelApp {
                 firebaseSync.getPlayerId(),
                 this.playerGame.guesses,
                 this.playerGame.boards,
-                'submitted',
-                this.currentRound
+                'submitted'
             );
             this.sendTypingIndicator(false); // Clear typing indicator
         }
@@ -502,8 +502,7 @@ class WordleDuelApp {
                 firebaseSync.getPlayerId(),
                 this.playerGame.guesses,
                 this.playerGame.boards,
-                'playing',
-                this.currentRound
+                'playing'
             );
         }
 
