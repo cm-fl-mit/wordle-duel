@@ -95,8 +95,20 @@ class WordleDuelApp {
         try {
             this.playerName = 'Player 1';
             const roomCode = await firebaseSync.createRoom(this.playerName);
-            alert('Room created: ' + roomCode + '\nShare this code with your opponent.');
+
+            // Display room code in UI instead of alert
             await this.joinMultiplayer(roomCode, this.playerName);
+
+            // Show room code and waiting message
+            const roomCodeDisplay = document.getElementById('room-code-display');
+            const roomCodeText = document.getElementById('room-code-text');
+            const waitingMessage = document.getElementById('waiting-message');
+
+            if (roomCodeDisplay && roomCodeText && waitingMessage) {
+                roomCodeText.textContent = roomCode;
+                roomCodeDisplay.classList.remove('hidden');
+                waitingMessage.classList.remove('hidden');
+            }
         } catch (error) {
             alert('Error creating room: ' + error.message);
         }
@@ -123,9 +135,16 @@ class WordleDuelApp {
     // Setup multiplayer game
     async joinMultiplayer(roomCode, playerName) {
         this.gameMode = 'multiplayer';
+        this.waitingForOpponent = (playerName === 'Player 1'); // Creator waits for joiner
 
         const target = ANSWER_WORDS[Math.floor(Math.random() * ANSWER_WORDS.length)];
         this.playerGame = new WordleGame(target);
+
+        // Initialize empty opponent game for display
+        this.opponentGame = {
+            guesses: [],
+            boards: []
+        };
 
         // Wait for opponent to join
         firebaseSync.onRoomStateChange((players) => {
@@ -133,6 +152,21 @@ class WordleDuelApp {
                 const opponent = players.find(p => p.id !== firebaseSync.getPlayerId());
                 if (opponent) {
                     this.opponentName = opponent.name;
+                    this.waitingForOpponent = false;
+
+                    // Update UI to show opponent joined
+                    const oppNameEl = document.getElementById('oppName');
+                    if (oppNameEl) {
+                        oppNameEl.textContent = this.opponentName;
+                    }
+                    this.updateRoundStatus('Opponent joined! Enter your guess');
+
+                    // Hide waiting message, enable input
+                    const waitingMsg = document.getElementById('waiting-message');
+                    if (waitingMsg) {
+                        waitingMsg.classList.add('hidden');
+                    }
+                    document.getElementById('input').disabled = false;
                 }
             }
         });
@@ -142,15 +176,8 @@ class WordleDuelApp {
             this.opponentName = opponentData.name;
 
             // Store opponent game data but don't reveal current round yet
-            if (!this.opponentGame) {
-                this.opponentGame = {
-                    guesses: opponentData.guesses,
-                    boards: opponentData.boards
-                };
-            } else {
-                this.opponentGame.guesses = opponentData.guesses;
-                this.opponentGame.boards = opponentData.boards;
-            }
+            this.opponentGame.guesses = opponentData.guesses || [];
+            this.opponentGame.boards = opponentData.boards || [];
 
             if (opponentData.state === 'submitted') {
                 this.opponentSubmitted = true;
@@ -210,10 +237,16 @@ class WordleDuelApp {
         document.getElementById('round').textContent = `Round ${this.currentRound}/${this.maxRounds}`;
         const input = document.getElementById('input');
         input.value = '';
-        input.disabled = false;
-        input.focus(); // Auto-focus for keyboard input
 
-        this.updateRoundStatus('Enter your guess');
+        // If waiting for opponent, disable input
+        if (this.waitingForOpponent) {
+            input.disabled = true;
+            this.updateRoundStatus('Waiting for opponent to join...');
+        } else {
+            input.disabled = false;
+            input.focus(); // Auto-focus for keyboard input
+            this.updateRoundStatus('Enter your guess');
+        }
 
         this.updateBoards();
 
