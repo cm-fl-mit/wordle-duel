@@ -179,7 +179,12 @@ class WordleDuelApp {
             this.opponentGame.guesses = opponentData.guesses || [];
             this.opponentGame.boards = opponentData.boards || [];
 
-            if (opponentData.state === 'submitted') {
+            // Only process if opponent has submitted for THIS round
+            const opponentRoundCount = (opponentData.guesses || []).length;
+            const myRoundCount = this.playerGame.guesses.length;
+
+            if (opponentData.state === 'submitted' && opponentRoundCount > myRoundCount) {
+                // Opponent has submitted for current round
                 this.opponentSubmitted = true;
 
                 // Show opponent status
@@ -197,19 +202,16 @@ class WordleDuelApp {
                 if (this.playerSubmitted) {
                     this.endRound();
                 }
-            } else {
-                // Update board (will hide current round guess)
+            } else if (opponentData.state === 'playing' || opponentRoundCount <= myRoundCount) {
+                // Opponent is still playing or we're ahead
                 this.updateOpponentBoard();
 
                 // Show typing indicator if opponent is typing
-                if (opponentData.isTyping) {
-                    const oppStatusEl = document.getElementById('opponent-status');
-                    if (oppStatusEl) {
+                const oppStatusEl = document.getElementById('opponent-status');
+                if (oppStatusEl) {
+                    if (opponentData.isTyping) {
                         oppStatusEl.textContent = 'typing...';
-                    }
-                } else {
-                    const oppStatusEl = document.getElementById('opponent-status');
-                    if (oppStatusEl) {
+                    } else {
                         oppStatusEl.textContent = '';
                     }
                 }
@@ -233,6 +235,12 @@ class WordleDuelApp {
     startRound() {
         this.playerSubmitted = false;
         this.opponentSubmitted = false;
+
+        // Clear status indicators
+        const playerStatusEl = document.getElementById('player-status');
+        const opponentStatusEl = document.getElementById('opponent-status');
+        if (playerStatusEl) playerStatusEl.textContent = '';
+        if (opponentStatusEl) opponentStatusEl.textContent = '';
 
         document.getElementById('round').textContent = `Round ${this.currentRound}/${this.maxRounds}`;
         const input = document.getElementById('input');
@@ -303,7 +311,8 @@ class WordleDuelApp {
                 firebaseSync.getPlayerId(),
                 this.playerGame.guesses,
                 this.playerGame.boards,
-                'submitted'
+                'submitted',
+                this.currentRound
             );
             this.sendTypingIndicator(false); // Clear typing indicator
         }
@@ -486,6 +495,18 @@ class WordleDuelApp {
     // Move to next round
     nextRound() {
         this.currentRound++;
+
+        // Reset state to 'playing' for next round if multiplayer
+        if (this.gameMode === 'multiplayer') {
+            firebaseSync.syncGameState(
+                firebaseSync.getPlayerId(),
+                this.playerGame.guesses,
+                this.playerGame.boards,
+                'playing',
+                this.currentRound
+            );
+        }
+
         // Don't reset games - guesses persist across rounds
         this.startRound();
     }
