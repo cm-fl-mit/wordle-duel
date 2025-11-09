@@ -15,8 +15,10 @@ class FirebaseSync {
             throw new Error('Firebase config not found. Please edit firebase-config.js');
         }
 
-        // Initialize Firebase
-        firebase.initializeApp(FIREBASE_CONFIG);
+        // Initialize Firebase (check if already initialized)
+        if (!firebase.apps.length) {
+            firebase.initializeApp(FIREBASE_CONFIG);
+        }
         this.db = firebase.database();
         console.log('Firebase initialized');
     }
@@ -31,6 +33,9 @@ class FirebaseSync {
         try {
             const roomCode = this.generateRoomCode();
             this.currentRoom = roomCode;
+
+            console.log('Attempting to create room:', roomCode);
+            console.log('Database reference:', this.db);
 
             const roomData = {
                 code: roomCode,
@@ -50,11 +55,14 @@ class FirebaseSync {
             };
 
             this.roomRef = this.db.ref('rooms/' + roomCode);
+            console.log('Writing to path:', 'rooms/' + roomCode);
             await this.roomRef.set(roomData);
-            console.log('Room created:', roomCode);
+            console.log('Room created successfully:', roomCode);
             return roomCode;
         } catch (error) {
             console.error('Error creating room:', error);
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
             throw error;
         }
     }
