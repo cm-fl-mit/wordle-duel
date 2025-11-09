@@ -175,16 +175,19 @@ class WordleDuelApp {
         firebaseSync.onOpponentStateChange((opponentData) => {
             this.opponentName = opponentData.name;
 
-            // Store opponent game data but don't reveal current round yet
+            // Always update opponent game data
             this.opponentGame.guesses = opponentData.guesses || [];
             this.opponentGame.boards = opponentData.boards || [];
 
-            // Only process if opponent has submitted for THIS round
+            // Update opponent board with their latest data
+            this.updateOpponentBoard();
+
+            // Check if opponent has submitted for current round
             const opponentRoundCount = (opponentData.guesses || []).length;
             const myRoundCount = this.playerGame.guesses.length;
 
-            if (opponentData.state === 'submitted' && opponentRoundCount > myRoundCount) {
-                // Opponent has submitted for current round
+            // Opponent is ahead (submitted for current round)
+            if (opponentRoundCount > myRoundCount) {
                 this.opponentSubmitted = true;
 
                 // Show opponent status
@@ -198,15 +201,12 @@ class WordleDuelApp {
                     this.updateRoundStatus(`${this.opponentName} is waiting - enter your guess`);
                 }
 
-                // If both submitted, end round and reveal
-                if (this.playerSubmitted) {
+                // If both submitted, end round
+                if (this.playerSubmitted && opponentRoundCount === myRoundCount) {
                     this.endRound();
                 }
-            } else if (opponentData.state === 'playing' || opponentRoundCount <= myRoundCount) {
-                // Opponent is still playing or we're ahead
-                this.updateOpponentBoard();
-
-                // Show typing indicator if opponent is typing
+            } else {
+                // Opponent is still on same round or behind
                 const oppStatusEl = document.getElementById('opponent-status');
                 if (oppStatusEl) {
                     if (opponentData.isTyping) {
@@ -299,14 +299,13 @@ class WordleDuelApp {
         document.getElementById('input').disabled = true;
         document.getElementById('input').value = '';
 
+        // Update board to show the submitted word immediately
+        this.updatePlayerBoard();
+
         // Update status messages
         this.updateRoundStatus(`Waiting for ${this.opponentName} to submit...`);
 
-        // Don't update the board here - wait for reveal
-        // Update board to hide the submitted guess
-        this.updatePlayerBoard();
-
-        // Sync state if multiplayer (but don't reveal yet)
+        // Sync state if multiplayer - NOW includes the new guess
         if (this.gameMode === 'multiplayer') {
             firebaseSync.syncGameState(
                 firebaseSync.getPlayerId(),
@@ -317,7 +316,7 @@ class WordleDuelApp {
             this.sendTypingIndicator(false); // Clear typing indicator
         }
 
-        // Check if both players submitted
+        // Check if both players submitted - if so, end round
         if (this.gameMode === 'ai' && this.opponentSubmitted) {
             this.endRound();
         } else if (this.gameMode === 'multiplayer' && this.opponentSubmitted) {
@@ -363,15 +362,8 @@ class WordleDuelApp {
         const board = document.getElementById('board1');
         const currentInput = this.playerSubmitted ? '' : document.getElementById('input').value;
 
-        // Show all previous guesses, but hide current round's guess after submission
-        const guessesToShow = this.playerSubmitted ?
-            this.playerGame.guesses.slice(0, -1) :
-            this.playerGame.guesses;
-        const boardsToShow = this.playerSubmitted ?
-            this.playerGame.boards.slice(0, -1) :
-            this.playerGame.boards;
-
-        createBoard(board, guessesToShow, boardsToShow, currentInput);
+        // Always show all completed guesses + current input
+        createBoard(board, this.playerGame.guesses, this.playerGame.boards, currentInput);
     }
 
     // Update opponent board display
@@ -380,15 +372,8 @@ class WordleDuelApp {
         const guesses = this.opponentGame.guesses || [];
         const boards = this.opponentGame.boards || [];
 
-        // Hide opponent's current round guess until round ends
-        const guessesToShow = this.opponentSubmitted ?
-            guesses.slice(0, -1) :
-            guesses;
-        const boardsToShow = this.opponentSubmitted ?
-            boards.slice(0, -1) :
-            boards;
-
-        createBoard(board, guessesToShow, boardsToShow);
+        // Show all opponent guesses - they're already synced from Firebase
+        createBoard(board, guesses, boards);
     }
 
     // Update both boards and keyboard
@@ -459,7 +444,7 @@ class WordleDuelApp {
         }
 
         // Check if game is over (6 guesses used)
-        if (this.currentRound >= this.maxRounds) {
+        if (this.playerGame.guesses.length >= this.maxRounds) {
             setTimeout(() => {
                 this.endGame('draw');
             }, 2000);
@@ -494,8 +479,6 @@ class WordleDuelApp {
 
     // Move to next round
     nextRound() {
-        this.currentRound++;
-
         // Reset state to 'playing' for next round if multiplayer
         if (this.gameMode === 'multiplayer') {
             firebaseSync.syncGameState(
