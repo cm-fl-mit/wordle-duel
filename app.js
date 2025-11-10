@@ -361,8 +361,15 @@ class WordleDuelApp {
 
         const result = this.opponentGame.submitGuess(guess);
         this.opponentSubmitted = true;
-        this.updateOpponentBoard();
 
+        // Don't reveal AI guess yet - wait for both to submit
+        // Show status that AI has submitted
+        const oppStatusEl = document.getElementById('opponent-status');
+        if (oppStatusEl) {
+            oppStatusEl.textContent = 'AI submitted!';
+        }
+
+        // If both submitted, end the round and reveal
         if (this.playerSubmitted) {
             this.endRound();
         }
@@ -383,16 +390,11 @@ class WordleDuelApp {
         const guesses = this.opponentGame.guesses || [];
         const boards = this.opponentGame.boards || [];
 
-        // In multiplayer, only show opponent guesses that have been revealed
-        if (this.gameMode === 'multiplayer') {
-            // Show guesses up to the last revealed round
-            const revealedGuesses = guesses.slice(0, this.playerGame.guesses.length);
-            const revealedBoards = boards.slice(0, this.playerGame.guesses.length);
-            createBoard(board, revealedGuesses, revealedBoards);
-        } else {
-            // In AI mode, show all guesses
-            createBoard(board, guesses, boards);
-        }
+        // Only show opponent guesses that have been revealed (when both players submitted)
+        // This applies to both AI and multiplayer modes
+        const revealedGuesses = guesses.slice(0, this.playerGame.guesses.length);
+        const revealedBoards = boards.slice(0, this.playerGame.guesses.length);
+        createBoard(board, revealedGuesses, revealedBoards);
     }
 
     // Update both boards and keyboard
