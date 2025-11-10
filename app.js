@@ -186,27 +186,43 @@ class WordleDuelApp {
             const opponentRoundCount = (opponentData.guesses || []).length;
             const myRoundCount = this.playerGame.guesses.length;
 
-            // Opponent is ahead (submitted for current round)
-            if (opponentRoundCount > myRoundCount) {
-                this.opponentSubmitted = true;
+            console.log('Opponent state change:', {
+                opponentRoundCount,
+                myRoundCount,
+                opponentState: opponentData.state,
+                playerSubmitted: this.playerSubmitted,
+                opponentSubmitted: this.opponentSubmitted
+            });
 
-                // Show opponent status
-                const oppStatusEl = document.getElementById('opponent-status');
-                if (oppStatusEl) {
-                    oppStatusEl.textContent = 'Opponent submitted their word!';
-                }
+            // Check if opponent has same or more guesses (they've submitted for current round)
+            if (opponentRoundCount >= myRoundCount && opponentData.state === 'submitted') {
+                // Mark opponent as submitted if they're on the same round and submitted
+                if (opponentRoundCount === myRoundCount && !this.opponentSubmitted) {
+                    this.opponentSubmitted = true;
 
-                // Update main status if player hasn't submitted yet
-                if (!this.playerSubmitted) {
-                    this.updateRoundStatus(`${this.opponentName} is waiting - enter your guess`);
-                }
+                    // Show opponent status
+                    const oppStatusEl = document.getElementById('opponent-status');
+                    if (oppStatusEl) {
+                        oppStatusEl.textContent = 'Opponent submitted their word!';
+                    }
 
-                // If both submitted, end round
-                if (this.playerSubmitted && opponentRoundCount === myRoundCount) {
-                    this.endRound();
+                    // If I've also submitted, end round
+                    if (this.playerSubmitted) {
+                        console.log('Both submitted! Ending round...');
+                        this.endRound();
+                    } else {
+                        // I haven't submitted yet
+                        this.updateRoundStatus(`${this.opponentName} is waiting - enter your guess`);
+                    }
+                } else if (opponentRoundCount > myRoundCount) {
+                    // Opponent is ahead
+                    const oppStatusEl = document.getElementById('opponent-status');
+                    if (oppStatusEl) {
+                        oppStatusEl.textContent = 'Opponent submitted their word!';
+                    }
                 }
             } else {
-                // Opponent is still on same round or behind
+                // Opponent is still playing
                 const oppStatusEl = document.getElementById('opponent-status');
                 if (oppStatusEl) {
                     if (opponentData.isTyping) {
