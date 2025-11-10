@@ -136,6 +136,7 @@ class WordleDuelApp {
     async joinMultiplayer(roomCode, playerName) {
         this.gameMode = 'multiplayer';
         this.waitingForOpponent = (playerName === 'Player 1'); // Creator waits for joiner
+        this.playerIndex = (playerName === 'Player 1') ? 1 : 2; // Store player index
 
         const target = ANSWER_WORDS[Math.floor(Math.random() * ANSWER_WORDS.length)];
         this.playerGame = new WordleGame(target);
@@ -171,7 +172,7 @@ class WordleDuelApp {
             }
         });
 
-        // Listen for opponent state changes
+        // Listen for opponent's guess data changes
         firebaseSync.onOpponentStateChange((opponentData) => {
             this.opponentName = opponentData.name;
 
@@ -179,59 +180,49 @@ class WordleDuelApp {
             this.opponentGame.guesses = opponentData.guesses || [];
             this.opponentGame.boards = opponentData.boards || [];
 
-            // Update opponent board with their latest data
-            this.updateOpponentBoard();
+            // Show typing indicator
+            const oppStatusEl = document.getElementById('opponent-status');
+            if (oppStatusEl && opponentData.isTyping) {
+                oppStatusEl.textContent = 'Opponent is typing...';
+            }
+        });
 
-            // Check if opponent has submitted for current round
-            const opponentRoundCount = (opponentData.guesses || []).length;
-            const myRoundCount = this.playerGame.guesses.length;
+        // Listen for shared game state changes (THIS is the single source of truth)
+        firebaseSync.onGameStateChange((gameState) => {
+            if (!gameState) return;
 
-            console.log('Opponent state change:', {
-                opponentRoundCount,
-                myRoundCount,
-                opponentState: opponentData.state,
-                playerSubmitted: this.playerSubmitted,
-                opponentSubmitted: this.opponentSubmitted
-            });
+            const currentRound = gameState.currentRound || 1;
+            const roundKey = `round${currentRound}`;
+            const roundState = gameState[roundKey];
 
-            // Check if opponent has same or more guesses (they've submitted for current round)
-            if (opponentRoundCount >= myRoundCount && opponentData.state === 'submitted') {
-                // Mark opponent as submitted if they're on the same round and submitted
-                if (opponentRoundCount === myRoundCount && !this.opponentSubmitted) {
-                    this.opponentSubmitted = true;
+            console.log('Game state changed:', { currentRound, roundState });
 
-                    // Show opponent status
+            // Check if both players have submitted for current round
+            if (roundState && roundState.player1Submit && roundState.player2Submit && !roundState.revealed) {
+                console.log('Both submitted! Revealing...');
+                // Both submitted - reveal and advance
+                this.revealAndAdvance(currentRound);
+            } else if (roundState) {
+                // Update status based on who submitted
+                const myKey = `player${this.playerIndex}Submit`;
+                const opponentKey = `player${this.playerIndex === 1 ? 2 : 1}Submit`;
+
+                if (roundState[opponentKey] && !roundState[myKey]) {
+                    this.updateRoundStatus(`${this.opponentName} is waiting - enter your guess`);
                     const oppStatusEl = document.getElementById('opponent-status');
                     if (oppStatusEl) {
                         oppStatusEl.textContent = 'Opponent submitted their word!';
                     }
-
-                    // If I've also submitted, end round
-                    if (this.playerSubmitted) {
-                        console.log('Both submitted! Ending round...');
-                        this.endRound();
-                    } else {
-                        // I haven't submitted yet
-                        this.updateRoundStatus(`${this.opponentName} is waiting - enter your guess`);
-                    }
-                } else if (opponentRoundCount > myRoundCount) {
-                    // Opponent is ahead
+                } else if (!roundState[opponentKey]) {
                     const oppStatusEl = document.getElementById('opponent-status');
-                    if (oppStatusEl) {
-                        oppStatusEl.textContent = 'Opponent submitted their word!';
-                    }
-                }
-            } else {
-                // Opponent is still playing
-                const oppStatusEl = document.getElementById('opponent-status');
-                if (oppStatusEl) {
-                    if (opponentData.isTyping) {
-                        oppStatusEl.textContent = 'Opponent is typing...';
-                    } else {
+                    if (oppStatusEl && oppStatusEl.textContent !== 'Opponent is typing...') {
                         oppStatusEl.textContent = '';
                     }
                 }
             }
+
+            // Update round display
+            document.getElementById('round').textContent = `Round ${currentRound}/6`;
         });
 
         this.startGame();
@@ -251,6 +242,7 @@ class WordleDuelApp {
     startRound() {
         this.playerSubmitted = false;
         this.opponentSubmitted = false;
+        this.roundEnding = false; // Reset the flag for the new round
 
         // Clear status indicators
         const playerStatusEl = document.getElementById('player-status');
@@ -321,21 +313,24 @@ class WordleDuelApp {
         // Update status messages
         this.updateRoundStatus(`Waiting for ${this.opponentName} to submit...`);
 
-        // Sync state if multiplayer - NOW includes the new guess
+        // Sync state if multiplayer
         if (this.gameMode === 'multiplayer') {
+            // Sync my guess data
             firebaseSync.syncGameState(
                 firebaseSync.getPlayerId(),
                 this.playerGame.guesses,
-                this.playerGame.boards,
-                'submitted'
+                this.playerGame.boards
             );
+
+            // Mark that I submitted for this round
+            const currentRound = this.playerGame.guesses.length; // Round number = number of guesses
+            firebaseSync.markRoundSubmit(currentRound, this.playerIndex);
+
             this.sendTypingIndicator(false); // Clear typing indicator
         }
 
-        // Check if both players submitted - if so, end round
+        // AI mode - check if both submitted
         if (this.gameMode === 'ai' && this.opponentSubmitted) {
-            this.endRound();
-        } else if (this.gameMode === 'multiplayer' && this.opponentSubmitted) {
             this.endRound();
         }
     }
@@ -382,14 +377,22 @@ class WordleDuelApp {
         createBoard(board, this.playerGame.guesses, this.playerGame.boards, currentInput);
     }
 
-    // Update opponent board display
+    // Update opponent board display (only show revealed rounds)
     updateOpponentBoard() {
         const board = document.getElementById('board2');
         const guesses = this.opponentGame.guesses || [];
         const boards = this.opponentGame.boards || [];
 
-        // Show all opponent guesses - they're already synced from Firebase
-        createBoard(board, guesses, boards);
+        // In multiplayer, only show opponent guesses that have been revealed
+        if (this.gameMode === 'multiplayer') {
+            // Show guesses up to the last revealed round
+            const revealedGuesses = guesses.slice(0, this.playerGame.guesses.length);
+            const revealedBoards = boards.slice(0, this.playerGame.guesses.length);
+            createBoard(board, revealedGuesses, revealedBoards);
+        } else {
+            // In AI mode, show all guesses
+            createBoard(board, guesses, boards);
+        }
     }
 
     // Update both boards and keyboard
@@ -411,6 +414,13 @@ class WordleDuelApp {
 
     // End current round
     endRound() {
+        // Prevent calling endRound multiple times
+        if (this.roundEnding) {
+            console.log('Round already ending, skipping duplicate call');
+            return;
+        }
+        this.roundEnding = true;
+
         if (this.aiGuessTimeout) clearTimeout(this.aiGuessTimeout);
 
         document.getElementById('input').disabled = true;
@@ -507,6 +517,91 @@ class WordleDuelApp {
 
         // Don't reset games - guesses persist across rounds
         this.startRound();
+    }
+
+    // Reveal and advance to next round (MULTIPLAYER ONLY - triggered when both submit)
+    async revealAndAdvance(roundNumber) {
+        console.log(`revealAndAdvance called for round ${roundNumber}`);
+
+        // Show "Revealing guesses..." message
+        this.updateRoundStatus('Revealing guesses...');
+
+        // Update both boards to show the just-submitted guesses with colors
+        this.updatePlayerBoard();
+        this.updateOpponentBoard();
+
+        // Clear status indicators
+        const playerStatusEl = document.getElementById('player-status');
+        const opponentStatusEl = document.getElementById('opponent-status');
+        if (playerStatusEl) playerStatusEl.textContent = '';
+        if (opponentStatusEl) opponentStatusEl.textContent = '';
+
+        // Get the latest guesses for both players
+        const playerLastGuess = this.playerGame.guesses[this.playerGame.guesses.length - 1];
+        const opponentLastGuess = this.opponentGame.guesses[this.opponentGame.guesses.length - 1];
+
+        // Check if either player won first (before checking collision)
+        const playerWon = this.playerGame.boards[this.playerGame.boards.length - 1]?.every(r => r === 'correct');
+        const opponentWon = this.opponentGame.boards[this.opponentGame.boards.length - 1]?.every(r => r === 'correct');
+
+        // Mark round as revealed in Firebase
+        await firebaseSync.markRoundRevealed(roundNumber);
+
+        // If both guessed the answer correctly
+        if (playerWon && opponentWon) {
+            setTimeout(() => {
+                this.endGame('both_won');
+            }, 2000);
+            return;
+        }
+
+        if (playerWon) {
+            setTimeout(() => {
+                this.endGame('player_win');
+            }, 2000);
+            return;
+        }
+
+        if (opponentWon) {
+            setTimeout(() => {
+                this.endGame('opponent_win');
+            }, 2000);
+            return;
+        }
+
+        // Check for collision - both submitted same word this round (but neither won)
+        if (playerLastGuess && opponentLastGuess && playerLastGuess === opponentLastGuess) {
+            setTimeout(() => {
+                this.endGame('collision');
+            }, 2000);
+            return;
+        }
+
+        // Check if game is over (6 guesses used)
+        if (roundNumber >= 6) {
+            setTimeout(() => {
+                this.endGame('draw');
+            }, 2000);
+            return;
+        }
+
+        // Continue to next round after a brief delay
+        setTimeout(() => {
+            // Reset playerSubmitted flag for next round
+            this.playerSubmitted = false;
+
+            // Re-enable input for next round
+            const input = document.getElementById('input');
+            input.disabled = false;
+            input.value = '';
+            input.focus();
+
+            // Update status
+            this.updateRoundStatus('Enter your guess');
+
+            // Update boards for next round
+            this.updateBoards();
+        }, 2000);
     }
 
     // End the game

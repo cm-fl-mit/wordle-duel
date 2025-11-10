@@ -43,14 +43,20 @@ class FirebaseSync {
                 players: {
                     [this.playerId]: {
                         name: playerName,
-                        joinedAt: firebase.database.ServerValue.TIMESTAMP
+                        joinedAt: firebase.database.ServerValue.TIMESTAMP,
+                        guesses: [],
+                        boards: []
                     }
                 },
                 gameState: {
                     status: 'waiting', // waiting, active, finished
-                    round: 1,
-                    word1: null,
-                    word2: null
+                    currentRound: 1,
+                    round1: { player1Submit: false, player2Submit: false, revealed: false },
+                    round2: { player1Submit: false, player2Submit: false, revealed: false },
+                    round3: { player1Submit: false, player2Submit: false, revealed: false },
+                    round4: { player1Submit: false, player2Submit: false, revealed: false },
+                    round5: { player1Submit: false, player2Submit: false, revealed: false },
+                    round6: { player1Submit: false, player2Submit: false, revealed: false }
                 }
             };
 
@@ -105,7 +111,7 @@ class FirebaseSync {
     }
 
     // Sync player's game state (guesses, board)
-    async syncGameState(playerId, guesses, boards, gameState) {
+    async syncGameState(playerId, guesses, boards) {
         try {
             if (!this.roomRef) return;
 
@@ -113,12 +119,61 @@ class FirebaseSync {
             await playerStateRef.update({
                 guesses,
                 boards,
-                state: gameState,
                 lastUpdate: firebase.database.ServerValue.TIMESTAMP
             });
         } catch (error) {
             console.error('Error syncing game state:', error);
         }
+    }
+
+    // Mark that a player submitted for a round
+    async markRoundSubmit(roundNumber, playerIndex) {
+        try {
+            if (!this.roomRef) return;
+
+            const roundKey = `round${roundNumber}`;
+            const submitKey = `player${playerIndex}Submit`;
+
+            await this.roomRef.child('gameState').child(roundKey).update({
+                [submitKey]: true
+            });
+        } catch (error) {
+            console.error('Error marking round submit:', error);
+        }
+    }
+
+    // Mark round as revealed
+    async markRoundRevealed(roundNumber) {
+        try {
+            if (!this.roomRef) return;
+
+            const roundKey = `round${roundNumber}`;
+
+            await this.roomRef.child('gameState').child(roundKey).update({
+                revealed: true
+            });
+
+            // Advance to next round
+            if (roundNumber < 6) {
+                await this.roomRef.child('gameState').update({
+                    currentRound: roundNumber + 1
+                });
+            }
+        } catch (error) {
+            console.error('Error marking round revealed:', error);
+        }
+    }
+
+    // Listen for game state changes
+    onGameStateChange(callback) {
+        if (!this.roomRef) return;
+
+        const gameStateRef = this.roomRef.child('gameState');
+        gameStateRef.on('value', (snapshot) => {
+            callback(snapshot.val());
+        });
+
+        this.listeners['gameState'] = gameStateRef;
     }
 
     // Listen for opponent's game state changes
